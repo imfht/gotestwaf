@@ -253,7 +253,8 @@ func (s *Scanner) scanURL(ctx context.Context, url string, blockConn bool, w *te
 		statusCode int
 		err        error
 	)
-
+	ctx = context.WithValue(ctx, "setName", w.setName)
+	ctx = context.WithValue(ctx, "caseName", w.caseName)
 	switch w.encoder {
 	case encoder.DefaultGRPCEncoder.GetName():
 		if !s.grpcConn.IsAvailable() {

@@ -3,10 +3,14 @@ package scanner
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +26,15 @@ type HTTPClient struct {
 	cookies       []*http.Cookie
 	headers       map[string]string
 	followCookies bool
+}
+type PayloadInfo struct {
+	Note       string `json:"note"`
+	HTTPUri    string `json:"http_uri"`
+	HTTPHeader string `json:"http_header"`
+	HTTPMethod string `json:"http_method"`
+	HTTPBody   []byte `json:"http_body"` // base64ed body
+	SetName    string `json:"set_name"`
+	CaseName   string `json:"case_name"`
 }
 
 func NewHTTPClient(cfg *config.Config) (*HTTPClient, error) {
@@ -98,6 +111,26 @@ func (c *HTTPClient) Send(
 	if len(c.cookies) > 0 && c.followCookies {
 		c.client.Jar.SetCookies(req.URL, c.cookies)
 	}
+	clientinfo := PayloadInfo{HTTPUri: req.URL.RequestURI(), HTTPMethod: req.Method, Note: fmt.Sprintf("%s^^^^%s^^^^%s", payload, encoderName, placeholderName)}
+	clientinfo.SetName = ctx.Value("setName").(string)
+	clientinfo.CaseName = ctx.Value("caseName").(string)
+	header, _ := json.Marshal(req.Header)
+	clientinfo.HTTPHeader = string(header)
+	if req.Body != nil {
+		var body []byte
+		reqBody, _ := ioutil.ReadAll(req.Body)
+		body = []byte(base64.StdEncoding.EncodeToString(reqBody))
+		clientinfo.HTTPBody = body
+	}
+
+	data, err := json.Marshal(clientinfo)
+	data = append(data, '\n')
+	f, err := os.OpenFile("requests.json", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
+	}
+	f.Write(data)
+	f.Close()
 
 	resp, err := c.client.Do(req)
 	if err != nil {
